@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -7,16 +12,18 @@ import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { UserDto } from 'src/user/dto/user.dto';
 import { plainToInstance } from 'class-transformer';
+import trackEvent from '../amplitude/trackEvent';
 
 @Injectable()
 export class UserService {
-  constructor(@InjectRepository(User)
-  private readonly userRepository: Repository<User>) {
-  }
+  constructor(
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
+  ) {}
 
   async createUser(createUserDto: CreateUserDto): Promise<UserDto> {
     try {
-      const { email, name, password, role } = createUserDto
+      const { email, name, password, role } = createUserDto;
       const salt = await bcrypt.genSalt();
       const hashedPassword = await bcrypt.hash(password, salt);
 
@@ -24,7 +31,7 @@ export class UserService {
         name,
         email,
         password: hashedPassword,
-        role
+        role,
       });
 
       const res = await this.userRepository.save(user);
@@ -32,9 +39,16 @@ export class UserService {
         id: res.id,
         email: res.email,
         name: res.name,
-        role: res.role
-      }
-      return result
+        role: res.role,
+      };
+
+      // Track the "User Created" event in Amplitude
+      await trackEvent('User Created', result.id, {
+        name: result.name,
+        email: result.email,
+        role: result.role,
+      });
+      return result;
     } catch (error) {
       if (error.code === '23505') {
         throw new ConflictException('User with this email already exists');
@@ -49,11 +63,11 @@ export class UserService {
       const users = await this.userRepository.find();
       console.log('users', users);
 
-      return users.map(user => ({
+      return users.map((user) => ({
         id: user.id,
         name: user.name,
         email: user.email,
-        role: user.role
+        role: user.role,
       }));
     } catch (error) {
       if (error.code === '23505') {
@@ -71,7 +85,6 @@ export class UserService {
     }
     return user;
   }
-
 
   async findUserByEmail(email: string): Promise<User> {
     try {

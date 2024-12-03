@@ -94,6 +94,24 @@ export class TaskController {
     return await this.taskService.updateTask(id, updateTaskDto, currentUser);
   }
 
+  @Patch(':id/assign')
+  @Roles(Role.Admin)
+  @ApiOperation({ summary: 'Assign a task to a user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Task assigned successfully',
+    type: TaskDto,
+  })
+  @ApiResponse({ status: 404, description: 'Task or User not found' })
+  async assignTask(
+    @Param('id') taskId: string,
+    @Query('assignedTo') assignedTo: string,
+    @Request() req: any,
+  ): Promise<TaskDto> {
+    const currentUser = req.user;
+    return this.taskService.assignTask(taskId, assignedTo, currentUser);
+  }
+
   @Delete(':id')
   @Roles(Role.Admin)
   @ApiOperation({ summary: 'Delete a task' })

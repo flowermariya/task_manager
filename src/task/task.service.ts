@@ -14,6 +14,7 @@ import { Task } from './entities/task.entity';
 import { User } from 'src/user/entities/user.entity';
 import { UserService } from 'src/user/user.service';
 import { Role, TaskStatus } from 'src/enum';
+import { SlackService } from 'src/slack/slack.service';
 
 @Injectable()
 export class TaskService {
@@ -21,6 +22,7 @@ export class TaskService {
     @InjectRepository(Task)
     private readonly taskRepository: Repository<Task>,
     private readonly userService: UserService,
+    private slackService: SlackService,
   ) {}
 
   // Create a new task
@@ -45,6 +47,13 @@ export class TaskService {
       });
 
       const savedTask = await this.taskRepository.save(task);
+
+      // Send notification to Slack
+      await this.slackService.sendMessage(
+        process.env.SLACK_CHANNEL_ID,
+        `New task created: ${savedTask.title} by ${savedTask.createdBy.name}`,
+      );
+
       return plainToInstance(TaskDto, savedTask);
     } catch (error) {
       console.error('Unexpected error from createTask:', error);
@@ -145,6 +154,37 @@ export class TaskService {
       return plainToInstance(TaskDto, updatedTask);
     } catch (error) {
       console.error('Unexpected error during task update:', error);
+      throw error;
+    }
+  }
+
+  async assignTask(
+    taskId: string,
+    assignedToId: string,
+    currentUser: User,
+  ): Promise<TaskDto> {
+    try {
+      const task = await this.taskRepository.findOne({ where: { id: taskId } });
+      if (!task)
+        throw new NotFoundException(`Task with ID ${taskId} not found`);
+
+      const assignedUser = await this.userService.fetchUserById(assignedToId);
+      if (!assignedUser)
+        throw new NotFoundException(`User with ID ${assignedToId} not found`);
+
+      task.assignedTo = assignedUser;
+      const updatedTask = await this.taskRepository.save(task);
+
+      // Notify assigned user via Slack
+      const message = `:pushpin: *Task Assigned*: "${task.title}" has been assigned to you by *${currentUser.name}*.`;
+      await this.slackService.sendMessage(
+        process.env.SLACK_CHANNEL_ID,
+        message,
+      );
+
+      return plainToInstance(TaskDto, updatedTask);
+    } catch (error) {
+      console.error('Unexpected error during task assign:', error);
       throw error;
     }
   }
